@@ -1,11 +1,10 @@
 package lt.codeacademy.u8.tarpinisMeteo;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lt.codeacademy.u8.tarpinisMeteo.meteo.RootCityForecast;
+import lt.codeacademy.u8.tarpinisMeteo.meteo.forecast.RootCityForecast;
 
-import javax.swing.text.html.Option;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -15,7 +14,7 @@ import java.util.Optional;
 public class JsonDownloadMeteo {
 
 
-    public static Optional<RootCityForecast> getDataFromMeteo(String url) {
+    public static String getDataFromMeteo(String url) {
         HttpClient client = HttpClient.newHttpClient();
 
 
@@ -30,29 +29,42 @@ public class JsonDownloadMeteo {
             String responseJson = response.body();
             System.out.println(responseJson);
 
-            return parseJsonToRootCityForecast(responseJson);
+            return responseJson;
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        return Optional.empty();
+        return "";
     }
 
 
-    public static Optional<RootCityForecast> parseJsonToRootCityForecast(String json) {
+    public static <T> Optional<T>  parseJsonToRootCityForecast(String json, Class<T> valueType) {
         ObjectMapper om = new ObjectMapper();
-
-
+        System.out.println("NON STOP POP");
+        System.out.println(valueType);
         try {
-
-            RootCityForecast rootCityForecast = om.readValue(json, RootCityForecast.class);
-            return Optional.of(rootCityForecast);
+            T result = om.readValue(json, valueType);
+            return Optional.of(result);
 
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
-
         return Optional.empty();
     }
+
+//    public static <T> Optional<T> parseJsonToRootCityForecast(String json, Class<T> valueType) {
+//        ObjectMapper om = new ObjectMapper();
+//        System.out.println("NON STOP POP");
+//        System.out.println(valueType);
+//        try {
+//            T result = om.readValue(json, new TypeReference<T>() {});
+//            return Optional.of(result);
+//        } catch (JsonProcessingException e) {
+//            e.printStackTrace();
+//        }
+//        return Optional.empty();
+//    }
+
+
 }

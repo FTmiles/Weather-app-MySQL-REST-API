@@ -1,4 +1,4 @@
-package lt.codeacademy.u8.tarpinisMeteo.meteo;
+package lt.codeacademy.u8.tarpinisMeteo.meteo.forecast;
 
 public class Place{
     public String code;
