@@ -1,25 +1,18 @@
 package lt.codeacademy.u8.tarpinisMeteo;
 
-import lt.codeacademy.u8.tarpinisMeteo.meteo.forecast.RootCityForecast;
-import lt.codeacademy.u8.tarpinisMeteo.meteo.observ.Observation;
-import lt.codeacademy.u8.tarpinisMeteo.meteo.observ.RootCityObserv;
-
+import javax.swing.plaf.nimbus.State;
 import java.sql.*;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
+
 
 public class MySQL {
     String url;
     String user;
     String pass;
     Ui ui;
-
-    DateTimeFormatter dateFormatMeteo = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
 
     public MySQL (String url, String user, String pass, Ui ui){
         this.url = url;
@@ -28,83 +21,115 @@ public class MySQL {
         this.ui = ui;
     }
 
-    public void writeToDbObserv(List<RootCityObserv> list){
-        String queryPrefix ="""
-                    INSERT INTO weatherNow (stationCode, temp, feelsLIkeTemp,
-                    `condition`, relativeHumidity, windSpeed, windDirection, `dateTime`)
-                    VALUES
-                    """;
+    public void writeDbWeather(List<WeatherFiltered> list, String table) {
+        String prepStmt = String.format("""
+                INSERT INTO %s (stationCode, temp, feelsLIkeTemp,
+                `condition`, relativeHumidity, windSpeed, windDirection, `dateTime`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);""", table);
 
-        String queryValues = list.stream().map(city->{
-            String code = city.station.code;
-            Observation l = city.observations.getLast();
-            return String.format("('%s', %s, %s, '%s', %s, %s, %s, '%s')",
-                    code, l.airTemperature, l.feelsLikeTemperature, l.conditionCode, l.relativeHumidity, l.windSpeed, l.windDirection, l.observationTimeUtc);
-        }).collect(Collectors.joining(","));
+        try (Connection conn = getConnection(); PreparedStatement preparedStatement = conn.prepareStatement(prepStmt)) {
+            for (WeatherFiltered forecast : list) {
+                preparedStatement.setString(1, forecast.getStationCode());
+                preparedStatement.setDouble(2, forecast.getTemp());
+                preparedStatement.setDouble(3, forecast.getFeelsLikeTemp());
+                preparedStatement.setString(4, forecast.getCondition());
+                preparedStatement.setDouble(5, forecast.getRelativeHumidity());
+                preparedStatement.setDouble(6, forecast.getWindSpeed());
+                preparedStatement.setDouble(7, forecast.getWindDirection());
+                preparedStatement.setString(8, forecast.getDateTime().toString());
 
-        updateDb(queryPrefix + queryValues);
-    }
-
-
-    public void writeToDbWeatherForecast(List<RootCityForecast> list){
-            String queryPrefix ="""
-                    INSERT INTO weatherForecast (stationCode, temp, feelsLIkeTemp,
-                    `condition`, relativeHumidity, windSpeed, windDirection, `dateTime`)
-                    VALUES
-                    """;
-
-            LocalDateTime dtNow = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
-
-            String queryValues = list.stream().flatMap(city->{
-                String code  = city.place.code;
-                return city.forecastTimestamps.stream()
-                        .filter(rec->{
-                    LocalDateTime dt = LocalDateTime.parse(rec.forecastTimeUtc, dateFormatMeteo);
-                    return dt.isAfter(dtNow) && dt.isBefore(dtNow.plusHours(6)) ||
-                            dt.isEqual(dtNow.plusDays(1).withHour(12)) ||
-                            dt.isEqual(dtNow.plusDays(2).withHour(12)) ||
-                            dt.isEqual(dtNow.plusDays(3).withHour(12)) ||
-                            dt.isEqual(dtNow.plusDays(4).withHour(12));
-                })
-                        .map(x->
-                     String.format("('%s', %s, %s, '%s', %s, %s, %s, '%s')",
-                            code, x.airTemperature, x.feelsLikeTemperature, x.conditionCode, x.relativeHumidity, x.windSpeed, x.windDirection, x.forecastTimeUtc)
-                );
-            }).collect(Collectors.joining(","));
-
-        updateDb(queryPrefix + queryValues);
-    }
-
-
-    public int updateDb(String updateStr){
-        try (Connection conn = DriverManager.getConnection(url, user, pass)){
-            if (conn == null) {
-                ui.infoOut("DB connection FAILED!");
-                return 0;
+                preparedStatement.addBatch();
             }
-            ui.infoOut("DB connection SUCCESS.");
+            preparedStatement.executeBatch();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void writeDbCities(List<String> cities){
+        String prepStmt = "INSERT INTO cities (activeCity) VALUES (?);";
+        try (Connection conn = getConnection(); PreparedStatement preparedStatement = conn.prepareStatement(prepStmt)) {
+            for (String city : cities) {
+                preparedStatement.setString(1, city);
+
+                preparedStatement.addBatch();
+            }
+            preparedStatement.executeBatch();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void wipeWriteDbCities(List<String> cities) {
+        String query1 = "DELETE FROM cities WHERE activeCity >= 'a';";
+        String query2 = String.format("INSERT INTO cities  VALUES %s;",
+                cities.stream().map(x->"('"+x+"')").collect(Collectors.joining(",")));
+
+        try (Connection conn = getConnection(); ){
+            conn.setAutoCommit(false);
+
             Statement stmt = conn.createStatement();
-            int rowsAffected = stmt.executeUpdate(updateStr);
+             stmt.execute(query1);
 
-        }catch (Exception e) { e.printStackTrace(); }
+            Statement stmt2 = conn.createStatement();
+            stmt2.execute(query2);
 
-        return 0;
+            conn.commit();
+
+
+        }catch (Exception e) {e.printStackTrace();}
+
     }
 
-    public Optional<ResultSet> queryDB (String query){
-        try (Connection conn = DriverManager.getConnection(url, user, pass)){
-            if (conn == null) {
-                ui.infoOut("DB connection FAILED!");
-                return Optional.empty();
-            }
-            ui.infoOut("DB connection SUCCESS.");
+    public List<String> readDbCities(){
+        String query = "SELECT * FROM cities;";
+        List<String> returnList = new ArrayList<>();
+
+        try (Connection conn = getConnection()) {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery(query);
 
-        }catch (Exception e) { e.printStackTrace(); }
+            while (rs.next()) {
+                String city = rs.getString("ActiveCity");
+                returnList.add(city);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return returnList;
+    }
 
-        return Optional.empty();
+    public List<WeatherFiltered> readDbWeather(String table) {
+        String query = String.format("SELECT * FROM %s;", table);
+        List<WeatherFiltered> returnList = new ArrayList<>();
+
+        try (Connection conn = getConnection()) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(query);
+
+            while (rs.next()){
+                String stationCode = rs.getString("stationCode");
+                double temp = rs.getInt("temp");
+                double feelsLikeTemp = rs.getInt("feelsLikeTemp");
+                String condition = rs.getString("condition");
+                double relativeHumidity = rs.getInt("relativeHumidity");
+                double windSpeed = rs.getInt("windSpeed");
+                double windDirection = rs.getInt("windDirection");
+                String dateTimeStr = rs.getString("dateTime");
+                LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, BusinessLogic.dateFormatMeteo);
+                returnList.add(new WeatherFiltered(stationCode, temp, feelsLikeTemp, condition, relativeHumidity, windSpeed, windDirection, dateTime));
+            }
+        } catch (Exception e) {e.printStackTrace();}
+        return returnList;
     }
 
 
+
+    public Connection getConnection() throws SQLException {
+        Connection conn = DriverManager.getConnection(url, user, pass);
+        if (conn != null) ui.infoOut("DB connection SUCCESS.");
+        return conn;
+    }
+
 }
+

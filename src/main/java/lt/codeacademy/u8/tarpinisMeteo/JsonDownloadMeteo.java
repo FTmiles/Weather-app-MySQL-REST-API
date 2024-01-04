@@ -17,19 +17,14 @@ public class JsonDownloadMeteo {
     public static String getDataFromMeteo(String url) {
         HttpClient client = HttpClient.newHttpClient();
 
-
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .GET()
                 .build();
 
         try {
-
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            String responseJson = response.body();
-            System.out.println(responseJson);
-
-            return responseJson;
+            return response.body();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -41,8 +36,7 @@ public class JsonDownloadMeteo {
 
     public static <T> Optional<T>  parseJsonToRootCityForecast(String json, Class<T> valueType) {
         ObjectMapper om = new ObjectMapper();
-        System.out.println("NON STOP POP");
-        System.out.println(valueType);
+
         try {
             T result = om.readValue(json, valueType);
             return Optional.of(result);

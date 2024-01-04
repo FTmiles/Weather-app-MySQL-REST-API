@@ -1,17 +1,27 @@
 package lt.codeacademy.u8.tarpinisMeteo;
 
 import lt.codeacademy.u8.tarpinisMeteo.meteo.forecast.RootCityForecast;
+import lt.codeacademy.u8.tarpinisMeteo.meteo.observ.Observation;
 import lt.codeacademy.u8.tarpinisMeteo.meteo.observ.RootCityObserv;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.sql.SQLOutput;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class BusinessLogic {
     Ui ui;
-    List<RootCityForecast> futureForecastCitiesArr = new ArrayList<>();
-    List<RootCityObserv> pastObservationsCitiesArr = new ArrayList<>();
-    List<String[]> cities = new ArrayList<>(List.of(new String[] {"vilnius", "vilniaus-ams"}, new String[] {"kaunas", "kauno-ams"}));
+    List<WeatherFiltered> forecastFltrArr = new ArrayList<>();
+    List<WeatherFiltered> weatherNowByCityArr = new ArrayList<>();
+    List<String[]> cities = new ArrayList<>();
+    List<String> cityNames = new ArrayList<>();
+
+    final static DateTimeFormatter dateFormatMeteo = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    final static List<String> allStations = List.of("birzu-ams", "dotnuvos-ams", "duksto-ams", "kauno-ams", "klaipedos-ams", "kybartu-ams", "laukuvos-ams", "lazdiju-ams", "nidos-ams", "panevezio-ams", "raseiniu-ams", "siauliu-ams", "silutes-ams", "telsiu-ams", "ukmerges-ams", "utenos-ams", "varenos-ams", "vilniaus-ams");
+    final static List<String> allCities = List.of("birzai", "dotnuva", "dukstas", "kaunas", "klaipeda", "kybartai", "laukuva", "lazdijai", "neringa-nida", "panevezys", "raseiniai", "siauliai", "silute", "telsiai", "ukmerge", "utena", "varena", "vilnius");
+
 
     String dbUrl =  "jdbc:mysql://sql11.freemysqlhosting.net:3306/sql11673584";
     String dbUser = "sql11673584";
@@ -25,12 +35,24 @@ public class BusinessLogic {
         this.ui = ui;
 
         this.mySql = new MySQL(dbUrl, dbUser, dbPass, ui);
+
     }
 
     public void start(){
+        //load from DB
+        forecastFltrArr = mySql.readDbWeather("weatherForecast");
+        weatherNowByCityArr = mySql.readDbWeather("weatherNow");
+        cityNames = mySql.readDbCities();
+        System.out.println("loading from db <cityNames> "  + cityNames);
+//        mySql.wipeWriteDbCities(List.of("asd", "halelooya", "uptown fucnk", "Anyksciai"));
+        //-----
+        for (WeatherFiltered f : forecastFltrArr) {
+            System.out.println(f.toStringForecast());
+        }
+
     Boolean running = true;
         while(running){
-            ui.infoOut("Weather forecast for cities: " + cities.toString());
+            ui.infoOut("Weather forecast for cities: " + String.join(", ", cityNames.stream().map(Utils::firstLetterCaps).toList()));
             ui.printMenu();
             String menuSelection = ui.getUserMenuInput();
             running =  handleMenuSelection(menuSelection);
@@ -40,6 +62,11 @@ public class BusinessLogic {
         ui.sc.close();
         System.out.println("The app is closing\nHave a good day!");
     }
+
+
+
+
+
 
     public Boolean handleMenuSelection(String menuSelection){
         if (menuSelection.equalsIgnoreCase("q")) return false;
@@ -53,76 +80,136 @@ public class BusinessLogic {
 
         return true;
     }
-    private void getFromDb(){
-
-    }
 
     private void changeCities() {
+
+        ui.infoOut("Available cities: " + String.join(", ", allCities));
+        ui.infoOut("Currently selected cities: " + String.join(", ", cityNames.stream().map(Utils::firstLetterCaps).toList()));
+
+        ui.infoOut("1. Add new city\n2. Remove currently city");
+        String menuSelection = ui.getUserMenuInput();
+
+        switch (menuSelection) {
+            case "1" -> addCity();
+            case "2" -> removeCity();
+        }
+
+//        mySql.writeDbCities(cityNames);
+        mySql.wipeWriteDbCities(cityNames);
     }
 
+    public void addCity(){
+        String input = ui.printScan("Enter one or more cities separated by commas\nAdd cities: ");
+        String inputNoSpace = input.replaceAll("\\s", "");
+        String[] cities = inputNoSpace.split(",");
+
+        for (String city : cities) {
+            if (BusinessLogic.allCities.contains(city.toLowerCase()))
+                cityNames.add(city.toLowerCase());
+            else ui.infoOut(city + " - not added, not available");
+        }
+
+        mySql.wipeWriteDbCities(cityNames);
+    }
+
+    public void removeCity(){
+        String input = ui.printScan("Enter one or more cities separated by commas\nDel cities: ");
+        String inputNoSpace = input.replaceAll("\\s", "");
+        String[] cities = inputNoSpace.split(",");
+
+        for (String city : cities) {
+            if (!cityNames.remove(city.toLowerCase()))
+                ui.infoOut(city + " - not removed, was never selected");
+        }
+        mySql.wipeWriteDbCities(cityNames);
+    }
+
+
+
     private void weatherNow() {
+        Map<String, List<WeatherFiltered>> grouped = weatherNowByCityArr.stream().collect(Collectors.groupingBy(x->x.stationCode));
+        grouped.forEach((key,val)-> {
+            String city = Utils.cityStationToFrom(key);
+            ui.infoOut(Utils.firstLetterCaps(city) + " - weather NOW " + "-".repeat(20) +
+                    "last measured at " + val.get(0).dateTime.format(DateTimeFormatter.ofPattern("HH:mm")));
+
+            for (WeatherFiltered x : val) {
+                ui.infoOut(x.toString());
+            }
+        });
     }
 
     private void weatherForecast() {
+        Map<String, List<WeatherFiltered>> grouped = forecastFltrArr.stream().collect(Collectors.groupingBy(x->x.stationCode));
+        grouped.forEach((key,val)-> {
+            ui.infoOut(Utils.firstLetterCaps(key) + "-".repeat(20));
+
+            for (WeatherFiltered x : val) {
+                ui.infoOut(x.toStringForecast());
+            }
+        });
     }
 
     public void syncWithMeteo(){
+        weatherNowByCityArr.clear();
+        forecastFltrArr.clear();
+        //forecast
+        for (String city : cityNames) {
+            Optional<RootCityForecast> opt1 = getApiData(forecastUrlPattern, city,  RootCityForecast.class );
+            filterSaveForecasts(opt1);
 
-        //<editor-fold desc="Old Method without generics">
-        //        for (String[] city : cities) {
-//            //Download FUTURE forecasts
-//            String url = String.format("https://api.meteo.lt/v1/places/%s/forecasts/long-term", city[0]);
-//            String jsonString = JsonDownloadMeteo.getDataFromMeteo(url);
-//            Optional<RootCityForecast> opt = JsonDownloadMeteo.parseJsonToRootCityForecast(jsonString, RootCityForecast.class);
-//            if (opt.isPresent())
-//                futureForecastCitiesArr.add(opt.get());
-//
-//
-//            //Download PAST observations
-//            String url2 = String.format("https://api.meteo.lt/v1/stations/%s/observations/latest", city[1]);
-//            Optional<RootCityObserv> opt2 = JsonDownloadMeteo.parseJsonToRootCityForecast(url2, RootCityObserv.class);
-//            if (opt2.isPresent())
-//                pastObservationsCitiesArr.add(opt2.get());
-//        }
-        //</editor-fold>
-
-        for (String[] city : cities) {
-            getApisFillArrays(forecastUrlPattern, city[0], futureForecastCitiesArr, RootCityForecast.class );
-            getApisFillArrays(observUrlPattern, city[1], pastObservationsCitiesArr, RootCityObserv.class );
-
+        //now
+            Optional<RootCityObserv> opt2 = getApiData(observUrlPattern, Utils.cityStationToFrom(city), RootCityObserv.class );
+            filterSaveObserv(opt2);
         }
 
-        mySql.writeToDbWeatherForecast(futureForecastCitiesArr);
-        mySql.writeToDbObserv(pastObservationsCitiesArr);
+        mySql.writeDbWeather(forecastFltrArr, "weatherForecast");
+        mySql.writeDbWeather(weatherNowByCityArr, "weatherNow");
+
     }
 
 
-    public <T> void getApisFillArrays (String urlPattern, String city, List<T> list, Class<T> valueType){
+
+    public <T> Optional<T> getApiData(String urlPattern, String city, Class<T> valueType){
         String url = String.format(urlPattern, city);
         String json = JsonDownloadMeteo.getDataFromMeteo(url);
-        Optional<T> opt = JsonDownloadMeteo.parseJsonToRootCityForecast(json, valueType);
-        if (opt.isPresent())
-            list.add(opt.get());
+        return JsonDownloadMeteo.parseJsonToRootCityForecast(json, valueType);
+    }
+
+    public void filterSaveObserv(Optional<RootCityObserv> opt){
+        if (opt.isEmpty()) return;
+        RootCityObserv city = opt.get();
+
+        String code  = city.station.code;
+        Observation last = city.observations.getLast();
+        LocalDateTime dt = LocalDateTime.parse(last.observationTimeUtc,dateFormatMeteo);
+        weatherNowByCityArr.add(new WeatherFiltered(code, last.airTemperature, last.feelsLikeTemperature, last.conditionCode, last.relativeHumidity, last.windSpeed, last.windDirection, dt));
+
+}
+
+
+    public void filterSaveForecasts(Optional<RootCityForecast> opt){
+        if (opt.isEmpty()) return;
+        RootCityForecast city = opt.get();
+
+        LocalDateTime dtNow = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
+        String code = city.place.code;
+
+        city.forecastTimestamps.stream()
+                .filter(rec->{
+            LocalDateTime dt = LocalDateTime.parse(rec.forecastTimeUtc, dateFormatMeteo);
+            return dt.isAfter(dtNow) && dt.isBefore(dtNow.plusHours(6)) ||
+                    dt.isEqual(dtNow.plusDays(1).withHour(12)) ||
+                    dt.isEqual(dtNow.plusDays(2).withHour(12)) ||
+                    dt.isEqual(dtNow.plusDays(3).withHour(12)) ||
+                    dt.isEqual(dtNow.plusDays(4).withHour(12));
+        })
+                .forEach(rec->{
+                    LocalDateTime dt = LocalDateTime.parse(rec.forecastTimeUtc,dateFormatMeteo);
+                    forecastFltrArr.add(new WeatherFiltered(code, rec.airTemperature, rec.feelsLikeTemperature, rec.conditionCode, rec.relativeHumidity, rec.windSpeed, rec.windDirection, dt));
+                });
     }
 
 
 
-
-//    public void syncWeatherObservations(){
-//
-//        for (String city : cities) {
-//            String url = String.format("https://api.meteo.lt/v1/places/%s/forecasts/long-term", city);
-//
-//            Optional<RootCityForecast> opt = JsonDownloadMeteo.getDataFromMeteo(url);
-//            if (opt.isPresent())
-//                futureForecastCitiesArr.add(opt.get());
-//                RootCityForecast oneTown = opt.get();
-//            System.out.println("donka donka");
-//
-////                opt.get().forecastTimestamps.get()
-//        }
-//        System.out.println("GOODD");
-//
-//
-//    }
 }

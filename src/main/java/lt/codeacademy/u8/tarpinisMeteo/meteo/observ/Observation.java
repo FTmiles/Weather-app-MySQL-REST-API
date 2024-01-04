@@ -4,12 +4,12 @@ public class Observation {
     public String observationTimeUtc;
     public double airTemperature;
     public double feelsLikeTemperature;
-    public int windSpeed;
+    public double windSpeed;
     public double windGust;
-    public int windDirection;
-    public int cloudCover;
+    public double windDirection;
+    public double cloudCover;
     public double seaLevelPressure;
-    public int relativeHumidity;
-    public int precipitation;
+    public double relativeHumidity;
+    public double precipitation;
     public String conditionCode;
 }
