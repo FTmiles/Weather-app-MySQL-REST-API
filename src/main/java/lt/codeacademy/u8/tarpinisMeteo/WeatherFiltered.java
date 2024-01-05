@@ -30,6 +30,9 @@ public class WeatherFiltered {
                 Utils.timeEnglish(dateTime), temp, feelsLikeTemp,  relativeHumidity, "%", Utils.getWindDirEnglish(windDirection), windSpeed, condition);
     }
 
+
+
+
     @Override
     public String toString() {
         return String.format("""

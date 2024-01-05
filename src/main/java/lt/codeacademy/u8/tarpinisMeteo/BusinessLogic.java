@@ -43,16 +43,13 @@ public class BusinessLogic {
         forecastFltrArr = mySql.readDbWeather("weatherForecast");
         weatherNowByCityArr = mySql.readDbWeather("weatherNow");
         cityNames = mySql.readDbCities();
-        System.out.println("loading from db <cityNames> "  + cityNames);
-//        mySql.wipeWriteDbCities(List.of("asd", "halelooya", "uptown fucnk", "Anyksciai"));
         //-----
-        for (WeatherFiltered f : forecastFltrArr) {
-            System.out.println(f.toStringForecast());
-        }
+
 
     Boolean running = true;
         while(running){
-            ui.infoOut("Weather forecast for cities: " + String.join(", ", cityNames.stream().map(Utils::firstLetterCaps).toList()));
+            ui.infoOut(".......................................\n" +
+                    "Weather forecast for cities: " + String.join(", ", cityNames.stream().map(Utils::firstLetterCaps).toList()));
             ui.printMenu();
             String menuSelection = ui.getUserMenuInput();
             running =  handleMenuSelection(menuSelection);

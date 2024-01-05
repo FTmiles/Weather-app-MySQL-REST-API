@@ -1,6 +1,5 @@
 package lt.codeacademy.u8.tarpinisMeteo;
 
-import javax.swing.plaf.nimbus.State;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,7 +26,11 @@ public class MySQL {
                 `condition`, relativeHumidity, windSpeed, windDirection, `dateTime`)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);""", table);
 
+        String delQuery = "TRUNCATE TABLE weatherForecast;";
+
         try (Connection conn = getConnection(); PreparedStatement preparedStatement = conn.prepareStatement(prepStmt)) {
+            conn.setAutoCommit(false);
+
             for (WeatherFiltered forecast : list) {
                 preparedStatement.setString(1, forecast.getStationCode());
                 preparedStatement.setDouble(2, forecast.getTemp());
@@ -40,7 +43,15 @@ public class MySQL {
 
                 preparedStatement.addBatch();
             }
+
+            //stetement - delete
+            Statement stmt = conn.createStatement();
+            stmt.execute(delQuery);
+
+            //prepared stetement - write
             preparedStatement.executeBatch();
+
+            conn.commit();
         } catch (SQLException e) {
             e.printStackTrace();
         }

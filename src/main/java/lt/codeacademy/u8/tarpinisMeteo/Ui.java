@@ -21,7 +21,6 @@ public class Ui {
 
     public void printMenu(){
         System.out.println("""
-
                     Last update ___-___-___
                     1. Show weather now
                     2. Show weather forecast
